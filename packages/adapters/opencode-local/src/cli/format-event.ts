@@ -1,4 +1,5 @@
 import pc from "picocolors";
+import { readString } from "@paperclipai/adapter-utils/value-readers";
 
 function safeJsonParse(text: string): unknown {
   try {
@@ -13,10 +14,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
-}
-
 function asNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
@@ -27,9 +24,9 @@ function errorText(value: unknown): string {
   if (!rec) return "";
   const data = asRecord(rec.data);
   const message =
-    asString(rec.message) ||
-    asString(data?.message) ||
-    asString(rec.name) ||
+    readString(rec.message) ||
+    readString(data?.message) ||
+    readString(rec.name) ||
     "";
   if (message) return message;
   try {
@@ -49,34 +46,34 @@ export function printOpenCodeStreamEvent(raw: string, _debug: boolean): void {
     return;
   }
 
-  const type = asString(parsed.type);
+  const type = readString(parsed.type);
 
   if (type === "step_start") {
-    const sessionId = asString(parsed.sessionID);
+    const sessionId = readString(parsed.sessionID);
     console.log(pc.blue(`step started${sessionId ? ` (session: ${sessionId})` : ""}`));
     return;
   }
 
   if (type === "text") {
     const part = asRecord(parsed.part);
-    const text = asString(part?.text).trim();
+    const text = readString(part?.text).trim();
     if (text) console.log(pc.green(`assistant: ${text}`));
     return;
   }
 
   if (type === "reasoning") {
     const part = asRecord(parsed.part);
-    const text = asString(part?.text).trim();
+    const text = readString(part?.text).trim();
     if (text) console.log(pc.gray(`thinking: ${text}`));
     return;
   }
 
   if (type === "tool_use") {
     const part = asRecord(parsed.part);
-    const tool = asString(part?.tool, "tool");
-    const callID = asString(part?.callID);
+    const tool = readString(part?.tool, "tool");
+    const callID = readString(part?.callID);
     const state = asRecord(part?.state);
-    const status = asString(state?.status);
+    const status = readString(state?.status);
     const isError = status === "error";
     const metadata = asRecord(state?.metadata);
 
@@ -92,7 +89,7 @@ export function printOpenCodeStreamEvent(raw: string, _debug: boolean): void {
       console.log((isError ? pc.red : pc.gray)(`tool_result ${metaParts.join(" ")}`));
     }
 
-    const output = (asString(state?.output) || asString(state?.error)).trim();
+    const output = (readString(state?.output) || readString(state?.error)).trim();
     if (output) console.log((isError ? pc.red : pc.gray)(output));
     return;
   }
@@ -105,7 +102,7 @@ export function printOpenCodeStreamEvent(raw: string, _debug: boolean): void {
     const output = asNumber(tokens?.output, 0) + asNumber(tokens?.reasoning, 0);
     const cached = asNumber(cache?.read, 0);
     const cost = asNumber(part?.cost, 0);
-    const reason = asString(part?.reason, "step");
+    const reason = readString(part?.reason, "step");
     console.log(pc.blue(`step finished: reason=${reason}`));
     console.log(pc.blue(`tokens: in=${input} out=${output} cached=${cached} cost=$${cost.toFixed(6)}`));
     return;

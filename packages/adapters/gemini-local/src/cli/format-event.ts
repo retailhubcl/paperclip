@@ -1,12 +1,9 @@
 import pc from "picocolors";
+import { readString } from "@paperclipai/adapter-utils/value-readers";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
-}
-
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
 }
 
 function asNumber(value: unknown, fallback = 0): number {
@@ -50,29 +47,29 @@ function printTextMessage(prefix: string, colorize: (text: string) => string, me
   const message = asRecord(messageRaw);
   if (!message) return;
 
-  const directText = asString(message.text).trim();
+  const directText = readString(message.text).trim();
   if (directText) console.log(colorize(`${prefix}: ${directText}`));
 
   const content = Array.isArray(message.content) ? message.content : [];
   for (const partRaw of content) {
     const part = asRecord(partRaw);
     if (!part) continue;
-    const type = asString(part.type).trim();
+    const type = readString(part.type).trim();
 
     if (type === "output_text" || type === "text" || type === "content") {
-      const text = asString(part.text).trim() || asString(part.content).trim();
+      const text = readString(part.text).trim() || readString(part.content).trim();
       if (text) console.log(colorize(`${prefix}: ${text}`));
       continue;
     }
 
     if (type === "thinking") {
-      const text = asString(part.text).trim();
+      const text = readString(part.text).trim();
       if (text) console.log(pc.gray(`thinking: ${text}`));
       continue;
     }
 
     if (type === "tool_call") {
-      const name = asString(part.name, asString(part.tool, "tool"));
+      const name = readString(part.name, readString(part.tool, "tool"));
       console.log(pc.yellow(`tool_call: ${name}`));
       const input = part.input ?? part.arguments ?? part.args;
       if (input !== undefined) console.log(pc.gray(stringifyUnknown(input)));
@@ -80,11 +77,11 @@ function printTextMessage(prefix: string, colorize: (text: string) => string, me
     }
 
     if (type === "tool_result" || type === "tool_response") {
-      const isError = part.is_error === true || asString(part.status).toLowerCase() === "error";
+      const isError = part.is_error === true || readString(part.status).toLowerCase() === "error";
       const contentText =
-        asString(part.output) ||
-        asString(part.text) ||
-        asString(part.result) ||
+        readString(part.output) ||
+        readString(part.text) ||
+        readString(part.result) ||
         stringifyUnknown(part.output ?? part.result ?? part.text ?? part.response);
       console.log((isError ? pc.red : pc.cyan)(`tool_result${isError ? " (error)" : ""}`));
       if (contentText) console.log((isError ? pc.red : pc.gray)(contentText));
@@ -118,17 +115,17 @@ export function printGeminiStreamEvent(raw: string, _debug: boolean): void {
     return;
   }
 
-  const type = asString(parsed.type);
+  const type = readString(parsed.type);
 
   if (type === "system") {
-    const subtype = asString(parsed.subtype);
+    const subtype = readString(parsed.subtype);
     if (subtype === "init") {
       const sessionId =
-        asString(parsed.session_id) ||
-        asString(parsed.sessionId) ||
-        asString(parsed.sessionID) ||
-        asString(parsed.checkpoint_id);
-      const model = asString(parsed.model);
+        readString(parsed.session_id) ||
+        readString(parsed.sessionId) ||
+        readString(parsed.sessionID) ||
+        readString(parsed.checkpoint_id);
+      const model = readString(parsed.model);
       const details = [sessionId ? `session: ${sessionId}` : "", model ? `model: ${model}` : ""]
         .filter(Boolean)
         .join(", ");
@@ -157,7 +154,7 @@ export function printGeminiStreamEvent(raw: string, _debug: boolean): void {
   // Gemini CLI v0.38+ stream-json schema:
   // {"type":"message","role":"assistant"|"user","content":"...","delta":?true}
   if (type === "message") {
-    const role = asString(parsed.role).trim().toLowerCase();
+    const role = readString(parsed.role).trim().toLowerCase();
     if (role === "assistant") {
       printTextMessage("assistant", pc.green, parsed.content);
       return;
@@ -170,13 +167,13 @@ export function printGeminiStreamEvent(raw: string, _debug: boolean): void {
   }
 
   if (type === "thinking") {
-    const text = asString(parsed.text).trim() || asString(asRecord(parsed.delta)?.text).trim();
+    const text = readString(parsed.text).trim() || readString(asRecord(parsed.delta)?.text).trim();
     if (text) console.log(pc.gray(`thinking: ${text}`));
     return;
   }
 
   if (type === "tool_call") {
-    const subtype = asString(parsed.subtype).trim().toLowerCase();
+    const subtype = readString(parsed.subtype).trim().toLowerCase();
     const toolCall = asRecord(parsed.tool_call ?? parsed.toolCall);
     const [toolName] = toolCall ? Object.keys(toolCall) : [];
     if (!toolCall || !toolName) {
@@ -194,7 +191,7 @@ export function printGeminiStreamEvent(raw: string, _debug: boolean): void {
         parsed.is_error === true ||
         payload.is_error === true ||
         payload.error !== undefined ||
-        asString(payload.status).toLowerCase() === "error";
+        readString(payload.status).toLowerCase() === "error";
       console.log((isError ? pc.red : pc.cyan)(`tool_result${isError ? " (error)" : ""}`));
       console.log((isError ? pc.red : pc.gray)(stringifyUnknown(payload.result ?? payload.output ?? payload.error)));
       return;
@@ -205,10 +202,10 @@ export function printGeminiStreamEvent(raw: string, _debug: boolean): void {
 
   if (type === "result") {
     printUsage(parsed);
-    const status = asString(parsed.status).toLowerCase();
+    const status = readString(parsed.status).toLowerCase();
     const isError =
       parsed.is_error === true || status === "error" || status === "failed";
-    const subtype = asString(parsed.subtype, status || "result");
+    const subtype = readString(parsed.subtype, status || "result");
     if (subtype || isError) {
       console.log((isError ? pc.red : pc.blue)(`result: subtype=${subtype} is_error=${isError ? "true" : "false"}`));
     }

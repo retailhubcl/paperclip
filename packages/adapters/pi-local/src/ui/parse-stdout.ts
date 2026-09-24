@@ -1,4 +1,5 @@
 import type { TranscriptEntry } from "@paperclipai/adapter-utils";
+import { readString } from "@paperclipai/adapter-utils/value-readers";
 
 function safeJsonParse(text: string): unknown {
   try {
@@ -11,10 +12,6 @@ function safeJsonParse(text: string): unknown {
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
-}
-
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
 }
 
 function extractTextContent(content: string | Array<{ type: string; text?: string; thinking?: string }>): { text: string; thinking: string } {
@@ -52,7 +49,7 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
     return [{ kind: "stdout", ts, text: trimmed }];
   }
 
-  const type = asString(parsed.type);
+  const type = readString(parsed.type);
 
   // RPC protocol messages - filter these out (internal implementation detail)
   if (type === "response" || type === "extension_ui_request" || type === "extension_ui_response" || type === "extension_error") {
@@ -142,7 +139,7 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
     // Process tool results - match with pending tool calls
     if (toolResults) {
       for (const tr of toolResults) {
-        const toolCallId = asString(tr.toolCallId, `tool-${Date.now()}`);
+        const toolCallId = readString(tr.toolCallId, `tool-${Date.now()}`);
         const content = tr.content;
         const isError = tr.isError === true;
         
@@ -159,7 +156,7 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
         
         // Get tool name from pending calls if available
         const pendingCall = pendingToolCalls.get(toolCallId);
-        const toolName = asString(tr.toolName, pendingCall?.toolName || "tool");
+        const toolName = readString(tr.toolName, pendingCall?.toolName || "tool");
         
         entries.push({
           kind: "tool_result",
@@ -186,11 +183,11 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
   if (type === "message_update") {
     const assistantEvent = asRecord(parsed.assistantMessageEvent);
     if (assistantEvent) {
-      const msgType = asString(assistantEvent.type);
+      const msgType = readString(assistantEvent.type);
       
       // Handle thinking deltas
       if (msgType === "thinking_delta") {
-        const delta = asString(assistantEvent.delta);
+        const delta = readString(assistantEvent.delta);
         if (delta) {
           return [{ kind: "thinking", ts, text: delta, delta: true }];
         }
@@ -198,7 +195,7 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
       
       // Handle text deltas
       if (msgType === "text_delta") {
-        const delta = asString(assistantEvent.delta);
+        const delta = readString(assistantEvent.delta);
         if (delta) {
           return [{ kind: "assistant", ts, text: delta, delta: true }];
         }
@@ -206,7 +203,7 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
       
       // Handle thinking end - emit full thinking block
       if (msgType === "thinking_end") {
-        const content = asString(assistantEvent.content);
+        const content = readString(assistantEvent.content);
         if (content) {
           return [{ kind: "thinking", ts, text: content }];
         }
@@ -214,7 +211,7 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
       
       // Handle text end - emit full text block
       if (msgType === "text_end") {
-        const content = asString(assistantEvent.content);
+        const content = readString(assistantEvent.content);
         if (content) {
           return [{ kind: "assistant", ts, text: content }];
         }
@@ -248,8 +245,8 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
 
   // Tool execution
   if (type === "tool_execution_start") {
-    const toolCallId = asString(parsed.toolCallId, `tool-${Date.now()}`);
-    const toolName = asString(parsed.toolName, "tool");
+    const toolCallId = readString(parsed.toolCallId, `tool-${Date.now()}`);
+    const toolName = readString(parsed.toolName, "tool");
     const args = parsed.args;
     
     // Track this tool call for later matching
@@ -269,8 +266,8 @@ export function parsePiStdoutLine(line: string, ts: string): TranscriptEntry[] {
   }
 
   if (type === "tool_execution_end") {
-    const toolCallId = asString(parsed.toolCallId, `tool-${Date.now()}`);
-    const toolName = asString(parsed.toolName, "tool");
+    const toolCallId = readString(parsed.toolCallId, `tool-${Date.now()}`);
+    const toolName = readString(parsed.toolName, "tool");
     const result = parsed.result;
     const isError = parsed.isError === true;
     

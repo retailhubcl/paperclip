@@ -1,4 +1,5 @@
 import type { TranscriptEntry } from "@paperclipai/adapter-utils";
+import { readString } from "@paperclipai/adapter-utils/value-readers";
 
 function safeJsonParse(text: string): unknown {
   try {
@@ -13,10 +14,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
-}
-
 function asNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
@@ -27,9 +24,9 @@ function errorText(value: unknown): string {
   if (!rec) return "";
   const data = asRecord(rec.data);
   const msg =
-    asString(rec.message) ||
-    asString(data?.message) ||
-    asString(rec.name) ||
+    readString(rec.message) ||
+    readString(data?.message) ||
+    readString(rec.name) ||
     "";
   if (msg) return msg;
   try {
@@ -43,24 +40,24 @@ function parseToolUse(parsed: Record<string, unknown>, ts: string): TranscriptEn
   const part = asRecord(parsed.part);
   if (!part) return [{ kind: "system", ts, text: "tool event" }];
 
-  const toolName = asString(part.tool, "tool");
+  const toolName = readString(part.tool, "tool");
   const state = asRecord(part.state);
   const input = state?.input ?? {};
   const callEntry: TranscriptEntry = {
     kind: "tool_call",
     ts,
     name: toolName,
-    toolUseId: asString(part.callID) || asString(part.id) || undefined,
+    toolUseId: readString(part.callID) || readString(part.id) || undefined,
     input,
   };
 
-  const status = asString(state?.status);
+  const status = readString(state?.status);
   if (status !== "completed" && status !== "error") return [callEntry];
 
   const rawOutput =
-    asString(state?.output) ||
-    asString(state?.error) ||
-    asString(part.title) ||
+    readString(state?.output) ||
+    readString(state?.error) ||
+    readString(part.title) ||
     `${toolName} ${status}`;
 
   const metadata = asRecord(state?.metadata);
@@ -77,7 +74,7 @@ function parseToolUse(parsed: Record<string, unknown>, ts: string): TranscriptEn
     {
       kind: "tool_result",
       ts,
-      toolUseId: asString(part.callID) || asString(part.id, toolName),
+      toolUseId: readString(part.callID) || readString(part.id, toolName),
       content,
       isError: status === "error",
     },
@@ -90,18 +87,18 @@ export function parseOpenCodeStdoutLine(line: string, ts: string): TranscriptEnt
     return [{ kind: "stdout", ts, text: line }];
   }
 
-  const type = asString(parsed.type);
+  const type = readString(parsed.type);
 
   if (type === "text") {
     const part = asRecord(parsed.part);
-    const text = asString(part?.text).trim();
+    const text = readString(part?.text).trim();
     if (!text) return [];
     return [{ kind: "assistant", ts, text }];
   }
 
   if (type === "reasoning") {
     const part = asRecord(parsed.part);
-    const text = asString(part?.text).trim();
+    const text = readString(part?.text).trim();
     if (!text) return [];
     return [{ kind: "thinking", ts, text }];
   }
@@ -111,7 +108,7 @@ export function parseOpenCodeStdoutLine(line: string, ts: string): TranscriptEnt
   }
 
   if (type === "step_start") {
-    const sessionId = asString(parsed.sessionID);
+    const sessionId = readString(parsed.sessionID);
     return [
       {
         kind: "system",
@@ -125,7 +122,7 @@ export function parseOpenCodeStdoutLine(line: string, ts: string): TranscriptEnt
     const part = asRecord(parsed.part);
     const tokens = asRecord(part?.tokens);
     const cache = asRecord(tokens?.cache);
-    const reason = asString(part?.reason, "step");
+    const reason = readString(part?.reason, "step");
     const output = asNumber(tokens?.output, 0) + asNumber(tokens?.reasoning, 0);
     return [
       {

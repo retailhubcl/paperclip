@@ -1,12 +1,9 @@
 import pc from "picocolors";
+import { readString } from "@paperclipai/adapter-utils/value-readers";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
-}
-
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
 }
 
 function asNumber(value: unknown, fallback = 0): number {
@@ -31,16 +28,16 @@ function errorText(value: unknown): string {
 }
 
 function printItemStarted(item: Record<string, unknown>): boolean {
-  const itemType = asString(item.type);
+  const itemType = readString(item.type);
   if (itemType === "command_execution") {
-    const command = asString(item.command);
+    const command = readString(item.command);
     console.log(pc.yellow("tool_call: command_execution"));
     if (command) console.log(pc.gray(command));
     return true;
   }
 
   if (itemType === "tool_use") {
-    const name = asString(item.name, "unknown");
+    const name = readString(item.name, "unknown");
     console.log(pc.yellow(`tool_call: ${name}`));
     if (item.input !== undefined) {
       try {
@@ -56,22 +53,22 @@ function printItemStarted(item: Record<string, unknown>): boolean {
 }
 
 function printItemCompleted(item: Record<string, unknown>): boolean {
-  const itemType = asString(item.type);
+  const itemType = readString(item.type);
 
   if (itemType === "agent_message") {
-    const text = asString(item.text);
+    const text = readString(item.text);
     if (text) console.log(pc.green(`assistant: ${text}`));
     return true;
   }
 
   if (itemType === "reasoning") {
-    const text = asString(item.text);
+    const text = readString(item.text);
     if (text) console.log(pc.gray(`thinking: ${text}`));
     return true;
   }
 
   if (itemType === "tool_use") {
-    const name = asString(item.name, "unknown");
+    const name = readString(item.name, "unknown");
     console.log(pc.yellow(`tool_call: ${name}`));
     if (item.input !== undefined) {
       try {
@@ -84,10 +81,10 @@ function printItemCompleted(item: Record<string, unknown>): boolean {
   }
 
   if (itemType === "command_execution") {
-    const command = asString(item.command);
-    const status = asString(item.status);
+    const command = readString(item.command);
+    const status = readString(item.status);
     const exitCode = typeof item.exit_code === "number" && Number.isFinite(item.exit_code) ? item.exit_code : null;
-    const output = asString(item.aggregated_output).replace(/\s+$/, "");
+    const output = readString(item.aggregated_output).replace(/\s+$/, "");
     const isError =
       (exitCode !== null && exitCode !== 0) ||
       status === "failed" ||
@@ -112,8 +109,8 @@ function printItemCompleted(item: Record<string, unknown>): boolean {
       .map((changeRaw) => asRecord(changeRaw))
       .filter((change): change is Record<string, unknown> => Boolean(change))
       .map((change) => {
-        const kind = asString(change.kind, "update");
-        const path = asString(change.path, "unknown");
+        const kind = readString(change.kind, "update");
+        const path = readString(change.path, "unknown");
         return `${kind} ${path}`;
       });
     const preview = entries.length > 0 ? entries.slice(0, 6).join(", ") : "none";
@@ -129,8 +126,8 @@ function printItemCompleted(item: Record<string, unknown>): boolean {
   }
 
   if (itemType === "tool_result") {
-    const isError = item.is_error === true || asString(item.status) === "error";
-    const text = asString(item.content) || asString(item.result) || asString(item.output);
+    const isError = item.is_error === true || readString(item.status) === "error";
+    const text = readString(item.content) || readString(item.result) || readString(item.output);
     console.log((isError ? pc.red : pc.cyan)(`tool_result${isError ? " (error)" : ""}`));
     if (text) console.log((isError ? pc.red : pc.gray)(text));
     return true;
@@ -151,11 +148,11 @@ export function printCodexStreamEvent(raw: string, _debug: boolean): void {
     return;
   }
 
-  const type = asString(parsed.type);
+  const type = readString(parsed.type);
 
   if (type === "thread.started") {
-    const threadId = asString(parsed.thread_id);
-    const model = asString(parsed.model);
+    const threadId = readString(parsed.thread_id);
+    const model = readString(parsed.model);
     const details = [threadId ? `session: ${threadId}` : "", model ? `model: ${model}` : ""].filter(Boolean).join(", ");
     console.log(pc.blue(`Codex thread started${details ? ` (${details})` : ""}`));
     return;
@@ -174,9 +171,9 @@ export function printCodexStreamEvent(raw: string, _debug: boolean): void {
           ? printItemStarted(item)
           : printItemCompleted(item);
       if (!handled) {
-        const itemType = asString(item.type, "unknown");
-        const id = asString(item.id);
-        const status = asString(item.status);
+        const itemType = readString(item.type, "unknown");
+        const id = readString(item.id);
+        const status = readString(item.status);
         const meta = [id ? `id=${id}` : "", status ? `status=${status}` : ""].filter(Boolean).join(" ");
         console.log(pc.gray(`${type}: ${itemType}${meta ? ` (${meta})` : ""}`));
       }
@@ -193,7 +190,7 @@ export function printCodexStreamEvent(raw: string, _debug: boolean): void {
     const cached = asNumber(usage?.cached_input_tokens, asNumber(usage?.cache_read_input_tokens));
     const cost = asNumber(parsed.total_cost_usd);
     const isError = parsed.is_error === true;
-    const subtype = asString(parsed.subtype);
+    const subtype = readString(parsed.subtype);
     const errors = Array.isArray(parsed.errors) ? parsed.errors.map(errorText).filter(Boolean) : [];
 
     console.log(

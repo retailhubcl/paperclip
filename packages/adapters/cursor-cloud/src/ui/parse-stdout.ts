@@ -1,4 +1,5 @@
 import type { TranscriptEntry } from "@paperclipai/adapter-utils";
+import { readString } from "@paperclipai/adapter-utils/value-readers";
 
 function safeJsonParse(text: string): unknown {
   try {
@@ -11,10 +12,6 @@ function safeJsonParse(text: string): unknown {
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
-}
-
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
 }
 
 function stringifyUnknown(value: unknown): string {
@@ -33,9 +30,9 @@ function parseAssistantMessage(message: Record<string, unknown>, ts: string): Tr
   for (const partRaw of content) {
     const part = asRecord(partRaw);
     if (!part) continue;
-    const type = asString(part.type).trim();
+    const type = readString(part.type).trim();
     if (type === "text") {
-      const text = asString(part.text).trim();
+      const text = readString(part.text).trim();
       if (text) entries.push({ kind: "assistant", ts, text });
       continue;
     }
@@ -43,8 +40,8 @@ function parseAssistantMessage(message: Record<string, unknown>, ts: string): Tr
       entries.push({
         kind: "tool_call",
         ts,
-        name: asString(part.name, "tool"),
-        toolUseId: asString(part.id) || undefined,
+        name: readString(part.name, "tool"),
+        toolUseId: readString(part.id) || undefined,
         input: part.input ?? {},
       });
     }
@@ -55,7 +52,7 @@ function parseAssistantMessage(message: Record<string, unknown>, ts: string): Tr
 function parseSdkMessage(messageRaw: unknown, ts: string): TranscriptEntry[] {
   const message = asRecord(messageRaw);
   if (!message) return [];
-  const type = asString(message.type);
+  const type = readString(message.type);
 
   if (type === "assistant") {
     const body = asRecord(message.message);
@@ -68,25 +65,25 @@ function parseSdkMessage(messageRaw: unknown, ts: string): TranscriptEntry[] {
     const text = content
       .map((entry) => asRecord(entry))
       .filter((entry): entry is Record<string, unknown> => Boolean(entry))
-      .map((entry) => asString(entry.text).trim())
+      .map((entry) => readString(entry.text).trim())
       .filter(Boolean)
       .join("\n");
     return text ? [{ kind: "user", ts, text }] : [];
   }
 
   if (type === "thinking") {
-    const text = asString(message.text).trim();
+    const text = readString(message.text).trim();
     return text ? [{ kind: "thinking", ts, text }] : [];
   }
 
   if (type === "tool_call") {
-    const toolUseId = asString(message.call_id, asString(message.id, "tool_call"));
-    const status = asString(message.status).toLowerCase();
+    const toolUseId = readString(message.call_id, readString(message.id, "tool_call"));
+    const status = readString(message.status).toLowerCase();
     if (status === "running") {
       return [{
         kind: "tool_call",
         ts,
-        name: asString(message.name, "tool"),
+        name: readString(message.name, "tool"),
         toolUseId,
         input: message.args ?? {},
       }];
@@ -96,7 +93,7 @@ function parseSdkMessage(messageRaw: unknown, ts: string): TranscriptEntry[] {
         kind: "tool_result",
         ts,
         toolUseId,
-        toolName: asString(message.name, "tool"),
+        toolName: readString(message.name, "tool"),
         content: stringifyUnknown(message.result ?? message.args ?? {}),
         isError: status === "error",
       }];
@@ -105,23 +102,23 @@ function parseSdkMessage(messageRaw: unknown, ts: string): TranscriptEntry[] {
   }
 
   if (type === "tool_result") {
-    const toolUseId = asString(message.call_id, asString(message.id, "tool_result"));
+    const toolUseId = readString(message.call_id, readString(message.id, "tool_result"));
     const isError =
       message.is_error === true ||
-      asString(message.status).toLowerCase() === "error";
+      readString(message.status).toLowerCase() === "error";
     return [{
       kind: "tool_result",
       ts,
       toolUseId,
-      toolName: asString(message.name, "tool"),
+      toolName: readString(message.name, "tool"),
       content: stringifyUnknown(message.result ?? message.content ?? message.output ?? {}),
       isError,
     }];
   }
 
   if (type === "status") {
-    const status = asString(message.status);
-    const statusMessage = asString(message.message);
+    const status = readString(message.status);
+    const statusMessage = readString(message.message);
     return [{
       kind: "system",
       ts,
@@ -130,7 +127,7 @@ function parseSdkMessage(messageRaw: unknown, ts: string): TranscriptEntry[] {
   }
 
   if (type === "task") {
-    const text = asString(message.text).trim();
+    const text = readString(message.text).trim();
     return text ? [{ kind: "system", ts, text }] : [];
   }
 
@@ -143,13 +140,13 @@ export function parseCursorCloudStdoutLine(line: string, ts: string): Transcript
     return [{ kind: "stdout", ts, text: line }];
   }
 
-  const type = asString(parsed.type);
+  const type = readString(parsed.type);
   if (type === "cursor_cloud.init") {
-    const sessionId = asString(parsed.sessionId, asString(parsed.agentId));
+    const sessionId = readString(parsed.sessionId, readString(parsed.agentId));
     return [{
       kind: "init",
       ts,
-      model: asString(parsed.model, "cursor_cloud"),
+      model: readString(parsed.model, "cursor_cloud"),
       sessionId,
     }];
   }
@@ -158,7 +155,7 @@ export function parseCursorCloudStdoutLine(line: string, ts: string): Transcript
     return [{
       kind: "system",
       ts,
-      text: `${asString(parsed.status, "status")}${parsed.message ? `: ${asString(parsed.message)}` : ""}`,
+      text: `${readString(parsed.status, "status")}${parsed.message ? `: ${readString(parsed.message)}` : ""}`,
     }];
   }
 
@@ -167,18 +164,18 @@ export function parseCursorCloudStdoutLine(line: string, ts: string): Transcript
   }
 
   if (type === "cursor_cloud.result") {
-    const status = asString(parsed.status, "error");
+    const status = readString(parsed.status, "error");
     return [{
       kind: "result",
       ts,
-      text: asString(parsed.result),
+      text: readString(parsed.result),
       inputTokens: 0,
       outputTokens: 0,
       cachedTokens: 0,
       costUsd: 0,
       subtype: status,
       isError: status !== "finished",
-      errors: parsed.error ? [asString(parsed.error)] : [],
+      errors: parsed.error ? [readString(parsed.error)] : [],
     }];
   }
 

@@ -1,4 +1,5 @@
 import type { TranscriptEntry } from "@paperclipai/adapter-utils";
+import { readString } from "@paperclipai/adapter-utils/value-readers";
 
 function safeJsonParse(text: string): unknown {
   try {
@@ -11,10 +12,6 @@ function safeJsonParse(text: string): unknown {
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
-}
-
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
 }
 
 function asNumber(value: unknown, fallback = 0): number {
@@ -58,16 +55,16 @@ function collectTextEntries(messageRaw: unknown, ts: string, kind: "assistant" |
   if (!message) return [];
 
   const entries: TranscriptEntry[] = [];
-  const directText = asString(message.text).trim();
+  const directText = readString(message.text).trim();
   if (directText) entries.push({ kind, ts, text: directText });
 
   const content = Array.isArray(message.content) ? message.content : [];
   for (const partRaw of content) {
     const part = asRecord(partRaw);
     if (!part) continue;
-    const type = asString(part.type).trim();
+    const type = readString(part.type).trim();
     if (type !== "output_text" && type !== "text" && type !== "content") continue;
-    const text = asString(part.text).trim() || asString(part.content).trim();
+    const text = readString(part.text).trim() || readString(part.content).trim();
     if (text) entries.push({ kind, ts, text });
   }
 
@@ -84,29 +81,29 @@ function parseAssistantMessage(messageRaw: unknown, ts: string): TranscriptEntry
   if (!message) return [];
 
   const entries: TranscriptEntry[] = [];
-  const directText = asString(message.text).trim();
+  const directText = readString(message.text).trim();
   if (directText) entries.push({ kind: "assistant", ts, text: directText });
 
   const content = Array.isArray(message.content) ? message.content : [];
   for (const partRaw of content) {
     const part = asRecord(partRaw);
     if (!part) continue;
-    const type = asString(part.type).trim();
+    const type = readString(part.type).trim();
 
     if (type === "output_text" || type === "text" || type === "content") {
-      const text = asString(part.text).trim() || asString(part.content).trim();
+      const text = readString(part.text).trim() || readString(part.content).trim();
       if (text) entries.push({ kind: "assistant", ts, text });
       continue;
     }
 
     if (type === "thinking") {
-      const text = asString(part.text).trim();
+      const text = readString(part.text).trim();
       if (text) entries.push({ kind: "thinking", ts, text });
       continue;
     }
 
     if (type === "tool_call") {
-      const name = asString(part.name, asString(part.tool, "tool"));
+      const name = readString(part.name, readString(part.tool, "tool"));
       entries.push({
         kind: "tool_call",
         ts,
@@ -118,17 +115,17 @@ function parseAssistantMessage(messageRaw: unknown, ts: string): TranscriptEntry
 
     if (type === "tool_result" || type === "tool_response") {
       const toolUseId =
-        asString(part.tool_use_id) ||
-        asString(part.toolUseId) ||
-        asString(part.call_id) ||
-        asString(part.id) ||
+        readString(part.tool_use_id) ||
+        readString(part.toolUseId) ||
+        readString(part.call_id) ||
+        readString(part.id) ||
         "tool_result";
       const contentText =
-        asString(part.output) ||
-        asString(part.text) ||
-        asString(part.result) ||
+        readString(part.output) ||
+        readString(part.text) ||
+        readString(part.result) ||
         stringifyUnknown(part.output ?? part.result ?? part.text ?? part.response);
-      const isError = part.is_error === true || asString(part.status).toLowerCase() === "error";
+      const isError = part.is_error === true || readString(part.status).toLowerCase() === "error";
       entries.push({
         kind: "tool_result",
         ts,
@@ -143,8 +140,8 @@ function parseAssistantMessage(messageRaw: unknown, ts: string): TranscriptEntry
 }
 
 function parseTopLevelToolEvent(parsed: Record<string, unknown>, ts: string): TranscriptEntry[] {
-  const subtype = asString(parsed.subtype).trim().toLowerCase();
-  const callId = asString(parsed.call_id, asString(parsed.callId, asString(parsed.id, "tool_call")));
+  const subtype = readString(parsed.subtype).trim().toLowerCase();
+  const callId = readString(parsed.call_id, readString(parsed.callId, readString(parsed.id, "tool_call")));
   const toolCall = asRecord(parsed.tool_call ?? parsed.toolCall);
   if (!toolCall) {
     return [{ kind: "system", ts, text: `tool_call${subtype ? ` (${subtype})` : ""}` }];
@@ -171,7 +168,7 @@ function parseTopLevelToolEvent(parsed: Record<string, unknown>, ts: string): Tr
       parsed.is_error === true ||
       payload.is_error === true ||
       payload.error !== undefined ||
-      asString(payload.status).toLowerCase() === "error";
+      readString(payload.status).toLowerCase() === "error";
     return [{
       kind: "tool_result",
       ts,
@@ -186,11 +183,11 @@ function parseTopLevelToolEvent(parsed: Record<string, unknown>, ts: string): Tr
 
 function readSessionId(parsed: Record<string, unknown>): string {
   return (
-    asString(parsed.session_id) ||
-    asString(parsed.sessionId) ||
-    asString(parsed.sessionID) ||
-    asString(parsed.checkpoint_id) ||
-    asString(parsed.thread_id)
+    readString(parsed.session_id) ||
+    readString(parsed.sessionId) ||
+    readString(parsed.sessionID) ||
+    readString(parsed.checkpoint_id) ||
+    readString(parsed.thread_id)
   );
 }
 
@@ -214,13 +211,13 @@ export function parseGeminiStdoutLine(line: string, ts: string): TranscriptEntry
     return [{ kind: "stdout", ts, text: line }];
   }
 
-  const type = asString(parsed.type);
+  const type = readString(parsed.type);
 
   if (type === "system") {
-    const subtype = asString(parsed.subtype);
+    const subtype = readString(parsed.subtype);
     if (subtype === "init") {
       const sessionId = readSessionId(parsed);
-      return [{ kind: "init", ts, model: asString(parsed.model, "gemini"), sessionId }];
+      return [{ kind: "init", ts, model: readString(parsed.model, "gemini"), sessionId }];
     }
     if (subtype === "error") {
       const text = errorText(parsed.error ?? parsed.message ?? parsed.detail);
@@ -240,7 +237,7 @@ export function parseGeminiStdoutLine(line: string, ts: string): TranscriptEntry
   // Gemini CLI v0.38+ stream-json schema:
   // {"type":"message","role":"assistant"|"user","content":"...","delta":?true}
   if (type === "message") {
-    const role = asString(parsed.role).trim().toLowerCase();
+    const role = readString(parsed.role).trim().toLowerCase();
     if (role === "assistant") {
       return parseAssistantMessage(parsed.content, ts);
     }
@@ -251,7 +248,7 @@ export function parseGeminiStdoutLine(line: string, ts: string): TranscriptEntry
   }
 
   if (type === "thinking") {
-    const text = asString(parsed.text).trim() || asString(asRecord(parsed.delta)?.text).trim();
+    const text = readString(parsed.text).trim() || readString(asRecord(parsed.delta)?.text).trim();
     return text ? [{ kind: "thinking", ts, text }] : [];
   }
 
@@ -261,7 +258,7 @@ export function parseGeminiStdoutLine(line: string, ts: string): TranscriptEntry
 
   if (type === "result") {
     const usage = readUsage(parsed);
-    const status = asString(parsed.status).toLowerCase();
+    const status = readString(parsed.status).toLowerCase();
     const isError =
       parsed.is_error === true || status === "error" || status === "failed";
     const errors = isError
@@ -270,12 +267,12 @@ export function parseGeminiStdoutLine(line: string, ts: string): TranscriptEntry
     return [{
       kind: "result",
       ts,
-      text: asString(parsed.result) || asString(parsed.text) || asString(parsed.response),
+      text: readString(parsed.result) || readString(parsed.text) || readString(parsed.response),
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
       cachedTokens: usage.cachedTokens,
       costUsd: asNumber(parsed.total_cost_usd, asNumber(parsed.cost_usd, asNumber(parsed.cost))),
-      subtype: asString(parsed.subtype, status || "result"),
+      subtype: readString(parsed.subtype, status || "result"),
       isError,
       errors,
     }];

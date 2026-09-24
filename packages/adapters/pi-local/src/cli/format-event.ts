@@ -1,4 +1,5 @@
 import pc from "picocolors";
+import { readString } from "@paperclipai/adapter-utils/value-readers";
 
 function safeJsonParse(text: string): unknown {
   try {
@@ -11,10 +12,6 @@ function safeJsonParse(text: string): unknown {
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
-}
-
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
 }
 
 function extractTextContent(content: string | Array<{ type: string; text?: string }>): string {
@@ -36,7 +33,7 @@ export function printPiStreamEvent(raw: string, _debug: boolean): void {
     return;
   }
 
-  const type = asString(parsed.type);
+  const type = readString(parsed.type);
 
   if (type === "agent_start") {
     console.log(pc.blue("Pi agent started"));
@@ -68,9 +65,9 @@ export function printPiStreamEvent(raw: string, _debug: boolean): void {
   if (type === "message_update") {
     const assistantEvent = asRecord(parsed.assistantMessageEvent);
     if (assistantEvent) {
-      const msgType = asString(assistantEvent.type);
+      const msgType = readString(assistantEvent.type);
       if (msgType === "text_delta") {
-        const delta = asString(assistantEvent.delta);
+        const delta = readString(assistantEvent.delta);
         if (delta) {
           console.log(pc.green(delta));
         }
@@ -80,7 +77,7 @@ export function printPiStreamEvent(raw: string, _debug: boolean): void {
   }
 
   if (type === "tool_execution_start") {
-    const toolName = asString(parsed.toolName);
+    const toolName = readString(parsed.toolName);
     const args = parsed.args;
     console.log(pc.yellow(`tool_start: ${toolName}`));
     if (args !== undefined) {

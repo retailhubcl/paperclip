@@ -1,12 +1,9 @@
 import pc from "picocolors";
+import { readString } from "@paperclipai/adapter-utils/value-readers";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
-}
-
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
 }
 
 export function printGrokStreamEvent(raw: string, _debug: boolean): void {
@@ -21,22 +18,22 @@ export function printGrokStreamEvent(raw: string, _debug: boolean): void {
     return;
   }
 
-  const type = asString(parsed.type).trim();
+  const type = readString(parsed.type).trim();
   if (type === "thought") {
-    const text = asString(parsed.data);
+    const text = readString(parsed.data);
     if (text) console.log(pc.gray(`thinking: ${text}`));
     return;
   }
 
   if (type === "text") {
-    const text = asString(parsed.data);
+    const text = readString(parsed.data);
     if (text) console.log(pc.green(`assistant: ${text}`));
     return;
   }
 
   if (type === "end") {
-    const stopReason = asString(parsed.stopReason);
-    const sessionId = asString(parsed.sessionId);
+    const stopReason = readString(parsed.stopReason);
+    const sessionId = readString(parsed.sessionId);
     const details = [stopReason ? `stopReason=${stopReason}` : "", sessionId ? `session=${sessionId}` : ""]
       .filter(Boolean)
       .join(" ");
@@ -46,9 +43,9 @@ export function printGrokStreamEvent(raw: string, _debug: boolean): void {
 
   if (type === "error") {
     const text =
-      asString(parsed.data) ||
-      asString(parsed.message) ||
-      asString(parsed.error) ||
+      readString(parsed.data) ||
+      readString(parsed.message) ||
+      readString(parsed.error) ||
       "Grok error";
     console.log(pc.red(`error: ${text}`));
     return;

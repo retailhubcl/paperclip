@@ -1,5 +1,6 @@
 import type { TranscriptEntry } from "@paperclipai/adapter-utils";
 import { normalizeOpenClawGatewayStreamLine } from "../shared/stream.js";
+import { readString } from "@paperclipai/adapter-utils/value-readers";
 
 function safeJsonParse(text: string): unknown {
   try {
@@ -14,24 +15,20 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-function asString(value: unknown): string {
-  return typeof value === "string" ? value : "";
-}
-
 function parseAgentEventLine(line: string, ts: string): TranscriptEntry[] {
   const match = line.match(/^\[openclaw-gateway:event\]\s+run=([^\s]+)\s+stream=([^\s]+)\s+data=(.*)$/s);
   if (!match) return [{ kind: "stdout", ts, text: line }];
 
-  const stream = asString(match[2]).toLowerCase();
-  const data = asRecord(safeJsonParse(asString(match[3]).trim()));
+  const stream = readString(match[2]).toLowerCase();
+  const data = asRecord(safeJsonParse(readString(match[3]).trim()));
 
   if (stream === "assistant") {
-    const delta = asString(data?.delta);
+    const delta = readString(data?.delta);
     if (delta.length > 0) {
       return [{ kind: "assistant", ts, text: delta, delta: true }];
     }
 
-    const text = asString(data?.text);
+    const text = readString(data?.text);
     if (text.length > 0) {
       return [{ kind: "assistant", ts, text }];
     }
@@ -39,13 +36,13 @@ function parseAgentEventLine(line: string, ts: string): TranscriptEntry[] {
   }
 
   if (stream === "error") {
-    const message = asString(data?.error) || asString(data?.message);
+    const message = readString(data?.error) || readString(data?.message);
     return message ? [{ kind: "stderr", ts, text: message }] : [];
   }
 
   if (stream === "lifecycle") {
-    const phase = asString(data?.phase).toLowerCase();
-    const message = asString(data?.error) || asString(data?.message);
+    const phase = readString(data?.phase).toLowerCase();
+    const message = readString(data?.error) || readString(data?.message);
     if ((phase === "error" || phase === "failed" || phase === "cancelled") && message) {
       return [{ kind: "stderr", ts, text: message }];
     }

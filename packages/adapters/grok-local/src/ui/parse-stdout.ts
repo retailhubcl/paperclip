@@ -1,5 +1,6 @@
 import type { TranscriptEntry } from "@paperclipai/adapter-utils";
 import { applyTurnBoundary, createTurnBoundaryState, type TurnBoundaryState } from "../shared/turn-boundary.js";
+import { readString } from "@paperclipai/adapter-utils/value-readers";
 
 function safeJsonParse(text: string): unknown {
   try {
@@ -14,15 +15,11 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
-}
-
 function extractErrorText(value: unknown): string {
   if (typeof value === "string") return value;
   const record = asRecord(value);
   if (!record) return "";
-  return asString(record.message) || asString(record.detail) || asString(record.code);
+  return readString(record.message) || readString(record.detail) || readString(record.code);
 }
 
 function parseLineInternal(
@@ -35,28 +32,28 @@ function parseLineInternal(
     return [{ kind: "stdout", ts, text: line }];
   }
 
-  const type = asString(parsed.type).trim();
+  const type = readString(parsed.type).trim();
 
   if (type === "thought") {
-    const text = asString(parsed.data);
+    const text = readString(parsed.data);
     if (!text) return [];
     return [{ kind: "thinking", ts, text: applyTurnBoundary(thoughtBoundary, text), delta: true }];
   }
 
   if (type === "text") {
-    const text = asString(parsed.data);
+    const text = readString(parsed.data);
     if (!text) return [];
     return [{ kind: "assistant", ts, text, delta: true }];
   }
 
   if (type === "error") {
-    const text = asString(parsed.data) || asString(parsed.message) || extractErrorText(parsed.error);
+    const text = readString(parsed.data) || readString(parsed.message) || extractErrorText(parsed.error);
     return text ? [{ kind: "stderr", ts, text }] : [{ kind: "stderr", ts, text: "Grok error" }];
   }
 
   if (type === "end") {
-    const stopReason = asString(parsed.stopReason).trim();
-    const sessionId = asString(parsed.sessionId).trim();
+    const stopReason = readString(parsed.stopReason).trim();
+    const sessionId = readString(parsed.sessionId).trim();
     const parts = [
       stopReason ? `stop_reason=${stopReason}` : "",
       sessionId ? `session=${sessionId}` : "",

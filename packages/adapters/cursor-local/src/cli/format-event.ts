@@ -1,13 +1,10 @@
 import pc from "picocolors";
 import { normalizeCursorStreamLine } from "../shared/stream.js";
+import { readString } from "@paperclipai/adapter-utils/value-readers";
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
-}
-
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
 }
 
 function asNumber(value: unknown, fallback = 0): number {
@@ -34,16 +31,16 @@ function printUserMessage(messageRaw: unknown): void {
   const message = asRecord(messageRaw);
   if (!message) return;
 
-  const directText = asString(message.text).trim();
+  const directText = readString(message.text).trim();
   if (directText) console.log(pc.gray(`user: ${directText}`));
 
   const content = Array.isArray(message.content) ? message.content : [];
   for (const partRaw of content) {
     const part = asRecord(partRaw);
     if (!part) continue;
-    const type = asString(part.type).trim();
+    const type = readString(part.type).trim();
     if (type !== "output_text" && type !== "text") continue;
-    const text = asString(part.text).trim();
+    const text = readString(part.text).trim();
     if (text) console.log(pc.gray(`user: ${text}`));
   }
 }
@@ -58,29 +55,29 @@ function printAssistantMessage(messageRaw: unknown): void {
   const message = asRecord(messageRaw);
   if (!message) return;
 
-  const directText = asString(message.text).trim();
+  const directText = readString(message.text).trim();
   if (directText) console.log(pc.green(`assistant: ${directText}`));
 
   const content = Array.isArray(message.content) ? message.content : [];
   for (const partRaw of content) {
     const part = asRecord(partRaw);
     if (!part) continue;
-    const type = asString(part.type).trim();
+    const type = readString(part.type).trim();
 
     if (type === "output_text" || type === "text") {
-      const text = asString(part.text).trim();
+      const text = readString(part.text).trim();
       if (text) console.log(pc.green(`assistant: ${text}`));
       continue;
     }
 
     if (type === "thinking") {
-      const text = asString(part.text).trim();
+      const text = readString(part.text).trim();
       if (text) console.log(pc.gray(`thinking: ${text}`));
       continue;
     }
 
     if (type === "tool_call") {
-      const name = asString(part.name, asString(part.tool, "tool"));
+      const name = readString(part.name, readString(part.tool, "tool"));
       console.log(pc.yellow(`tool_call: ${name}`));
       const input = part.input ?? part.arguments ?? part.args;
       if (input !== undefined) {
@@ -94,11 +91,11 @@ function printAssistantMessage(messageRaw: unknown): void {
     }
 
     if (type === "tool_result") {
-      const isError = part.is_error === true || asString(part.status).toLowerCase() === "error";
+      const isError = part.is_error === true || readString(part.status).toLowerCase() === "error";
       const contentText =
-        asString(part.output) ||
-        asString(part.text) ||
-        asString(part.result) ||
+        readString(part.output) ||
+        readString(part.text) ||
+        readString(part.result) ||
         stringifyUnknown(part.output ?? part.result ?? part.text ?? part);
       console.log((isError ? pc.red : pc.cyan)(`tool_result${isError ? " (error)" : ""}`));
       if (contentText) console.log((isError ? pc.red : pc.gray)(contentText));
@@ -107,8 +104,8 @@ function printAssistantMessage(messageRaw: unknown): void {
 }
 
 function printToolCallEventTopLevel(parsed: Record<string, unknown>): void {
-  const subtype = asString(parsed.subtype).trim().toLowerCase();
-  const callId = asString(parsed.call_id, asString(parsed.callId, asString(parsed.id, "")));
+  const subtype = readString(parsed.subtype).trim().toLowerCase();
+  const callId = readString(parsed.call_id, readString(parsed.callId, readString(parsed.id, "")));
   const toolCall = asRecord(parsed.tool_call ?? parsed.toolCall);
   if (!toolCall) {
     console.log(pc.yellow(`tool_call${subtype ? `: ${subtype}` : ""}`));
@@ -157,12 +154,12 @@ function printToolCallEventTopLevel(parsed: Record<string, unknown>): void {
 }
 
 function printLegacyToolEvent(part: Record<string, unknown>): void {
-  const tool = asString(part.tool, "tool");
-  const callId = asString(part.callID, asString(part.id, ""));
+  const tool = readString(part.tool, "tool");
+  const callId = readString(part.callID, readString(part.id, ""));
   const state = asRecord(part.state);
-  const status = asString(state?.status);
+  const status = readString(state?.status);
   const input = state?.input;
-  const output = asString(state?.output).replace(/\s+$/, "");
+  const output = readString(state?.output).replace(/\s+$/, "");
   const metadata = asRecord(state?.metadata);
   const exit = asNumber(metadata?.exit, NaN);
   const isError =
@@ -207,16 +204,16 @@ export function printCursorStreamEvent(raw: string, _debug: boolean): void {
     return;
   }
 
-  const type = asString(parsed.type);
+  const type = readString(parsed.type);
 
   if (type === "system") {
-    const subtype = asString(parsed.subtype);
+    const subtype = readString(parsed.subtype);
     if (subtype === "init") {
       const sessionId =
-        asString(parsed.session_id) ||
-        asString(parsed.sessionId) ||
-        asString(parsed.sessionID);
-      const model = asString(parsed.model);
+        readString(parsed.session_id) ||
+        readString(parsed.sessionId) ||
+        readString(parsed.sessionID);
+      const model = readString(parsed.model);
       const details = [sessionId ? `session: ${sessionId}` : "", model ? `model: ${model}` : ""]
         .filter(Boolean)
         .join(", ");
@@ -238,7 +235,7 @@ export function printCursorStreamEvent(raw: string, _debug: boolean): void {
   }
 
   if (type === "thinking") {
-    const text = asString(parsed.text).trim() || asString(asRecord(parsed.delta)?.text).trim();
+    const text = readString(parsed.text).trim() || readString(asRecord(parsed.delta)?.text).trim();
     if (text) console.log(pc.gray(`thinking: ${text}`));
     return;
   }
@@ -257,12 +254,12 @@ export function printCursorStreamEvent(raw: string, _debug: boolean): void {
       asNumber(usage?.cachedInputTokens, asNumber(usage?.cache_read_input_tokens)),
     );
     const cost = asNumber(parsed.total_cost_usd, asNumber(parsed.cost_usd, asNumber(parsed.cost)));
-    const subtype = asString(parsed.subtype, "result");
+    const subtype = readString(parsed.subtype, "result");
     const isError = parsed.is_error === true || subtype === "error" || subtype === "failed";
 
     console.log(pc.blue(`result: subtype=${subtype}`));
     console.log(pc.blue(`tokens: in=${input} out=${output} cached=${cached} cost=$${cost.toFixed(6)}`));
-    const resultText = asString(parsed.result).trim();
+    const resultText = readString(parsed.result).trim();
     if (resultText) console.log((isError ? pc.red : pc.green)(`assistant: ${resultText}`));
     const errors = Array.isArray(parsed.errors) ? parsed.errors.map((value) => stringifyUnknown(value)).filter(Boolean) : [];
     if (errors.length > 0) console.log(pc.red(`errors: ${errors.join(" | ")}`));
@@ -270,21 +267,21 @@ export function printCursorStreamEvent(raw: string, _debug: boolean): void {
   }
 
   if (type === "error") {
-    const message = asString(parsed.message) || stringifyUnknown(parsed.error ?? parsed.detail) || line;
+    const message = readString(parsed.message) || stringifyUnknown(parsed.error ?? parsed.detail) || line;
     console.log(pc.red(`error: ${message}`));
     return;
   }
 
   // Compatibility with older stream-json event shapes.
   if (type === "step_start") {
-    const sessionId = asString(parsed.sessionID);
+    const sessionId = readString(parsed.sessionID);
     console.log(pc.blue(`step started${sessionId ? ` (session: ${sessionId})` : ""}`));
     return;
   }
 
   if (type === "text") {
     const part = asRecord(parsed.part);
-    const text = asString(part?.text);
+    const text = readString(part?.text);
     if (text) console.log(pc.green(`assistant: ${text}`));
     return;
   }
@@ -303,7 +300,7 @@ export function printCursorStreamEvent(raw: string, _debug: boolean): void {
     const part = asRecord(parsed.part);
     const tokens = asRecord(part?.tokens);
     const cache = asRecord(tokens?.cache);
-    const reason = asString(part?.reason, "step_finish");
+    const reason = readString(part?.reason, "step_finish");
     const input = asNumber(tokens?.input);
     const output = asNumber(tokens?.output);
     const cached = asNumber(cache?.read);

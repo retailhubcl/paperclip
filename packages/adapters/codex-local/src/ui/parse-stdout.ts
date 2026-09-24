@@ -1,4 +1,5 @@
 import { type TranscriptEntry } from "@paperclipai/adapter-utils";
+import { readString } from "@paperclipai/adapter-utils/value-readers";
 
 function safeJsonParse(text: string): unknown {
   try {
@@ -11,10 +12,6 @@ function safeJsonParse(text: string): unknown {
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
-}
-
-function asString(value: unknown, fallback = ""): string {
-  return typeof value === "string" ? value : fallback;
 }
 
 function asNumber(value: unknown, fallback = 0): number {
@@ -53,12 +50,12 @@ function parseCommandExecutionItem(
   ts: string,
   phase: "started" | "completed",
 ): TranscriptEntry[] {
-  const id = asString(item.id);
-  const command = asString(item.command);
-  const status = asString(item.status);
+  const id = readString(item.id);
+  const command = readString(item.command);
+  const status = readString(item.status);
   const exitCode = typeof item.exit_code === "number" && Number.isFinite(item.exit_code) ? item.exit_code : null;
   const safeCommand = command;
-  const output = asString(item.aggregated_output).replace(/\s+$/, "");
+  const output = readString(item.aggregated_output).replace(/\s+$/, "");
 
   if (phase === "started") {
     return [{
@@ -104,8 +101,8 @@ function parseFileChangeItem(item: Record<string, unknown>, ts: string): Transcr
     .map((changeRaw) => asRecord(changeRaw))
     .filter((change): change is Record<string, unknown> => Boolean(change))
     .map((change) => {
-      const kind = asString(change.kind, "update");
-      const path = asString(change.path, "unknown");
+      const kind = readString(change.kind, "update");
+      const path = readString(change.path, "unknown");
       return `${kind} ${path}`;
     });
 
@@ -123,8 +120,8 @@ function parseToolUseItem(
   ts: string,
   phase: "started" | "completed",
 ): TranscriptEntry[] {
-  const name = asString(item.name, "unknown");
-  const toolUseId = asString(item.id, name || "tool_use");
+  const name = readString(item.name, "unknown");
+  const toolUseId = readString(item.id, name || "tool_use");
 
   if (phase === "started") {
     return [{
@@ -136,7 +133,7 @@ function parseToolUseItem(
     }];
   }
 
-  const status = asString(item.status);
+  const status = readString(item.status);
   const isError =
     item.is_error === true ||
     status === "failed" ||
@@ -150,7 +147,7 @@ function parseToolUseItem(
     item.error ??
     item.message;
   const content =
-    asString(rawContent) ||
+    readString(rawContent) ||
     errorText(rawContent) ||
     stringifyUnknown(rawContent) ||
     `${name} ${isError ? "failed" : "completed"}`;
@@ -169,16 +166,16 @@ function parseCodexItem(
   ts: string,
   phase: "started" | "completed",
 ): TranscriptEntry[] {
-  const itemType = asString(item.type);
+  const itemType = readString(item.type);
 
   if (itemType === "agent_message") {
-    const text = asString(item.text);
+    const text = readString(item.text);
     if (text) return [{ kind: "assistant", ts, text }];
     return [];
   }
 
   if (itemType === "reasoning") {
-    const text = asString(item.text);
+    const text = readString(item.text);
     if (text) return [{ kind: "thinking", ts, text }];
     return [{ kind: "system", ts, text: phase === "started" ? "reasoning started" : "reasoning completed" }];
   }
@@ -196,13 +193,13 @@ function parseCodexItem(
   }
 
   if (itemType === "tool_result" && phase === "completed") {
-    const toolUseId = asString(item.tool_use_id, asString(item.id));
+    const toolUseId = readString(item.tool_use_id, readString(item.id));
     const content =
-      asString(item.content) ||
-      asString(item.output) ||
-      asString(item.result) ||
+      readString(item.content) ||
+      readString(item.output) ||
+      readString(item.result) ||
       stringifyUnknown(item.content ?? item.output ?? item.result);
-    const isError = item.is_error === true || asString(item.status) === "error";
+    const isError = item.is_error === true || readString(item.status) === "error";
     return [{ kind: "tool_result", ts, toolUseId, content, isError }];
   }
 
@@ -211,8 +208,8 @@ function parseCodexItem(
     return [{ kind: "stderr", ts, text: text || "error" }];
   }
 
-  const id = asString(item.id);
-  const status = asString(item.status);
+  const id = readString(item.id);
+  const status = readString(item.status);
   const meta = [id ? `id=${id}` : "", status ? `status=${status}` : ""].filter(Boolean).join(" ");
   return [{
     kind: "system",
@@ -227,14 +224,14 @@ export function parseCodexStdoutLine(line: string, ts: string): TranscriptEntry[
     return [{ kind: "stdout", ts, text: line }];
   }
 
-  const type = asString(parsed.type);
+  const type = readString(parsed.type);
 
   if (type === "thread.started") {
-    const threadId = asString(parsed.thread_id);
+    const threadId = readString(parsed.thread_id);
     return [{
       kind: "init",
       ts,
-      model: asString(parsed.model, "codex"),
+      model: readString(parsed.model, "codex"),
       sessionId: threadId,
     }];
   }
@@ -257,12 +254,12 @@ export function parseCodexStdoutLine(line: string, ts: string): TranscriptEntry[
     return [{
       kind: "result",
       ts,
-      text: asString(parsed.result),
+      text: readString(parsed.result),
       inputTokens,
       outputTokens,
       cachedTokens,
       costUsd: asNumber(parsed.total_cost_usd),
-      subtype: asString(parsed.subtype),
+      subtype: readString(parsed.subtype),
       isError: parsed.is_error === true,
       errors: Array.isArray(parsed.errors)
         ? parsed.errors.map(errorText).filter(Boolean)
@@ -279,12 +276,12 @@ export function parseCodexStdoutLine(line: string, ts: string): TranscriptEntry[
     return [{
       kind: "result",
       ts,
-      text: asString(parsed.result),
+      text: readString(parsed.result),
       inputTokens,
       outputTokens,
       cachedTokens,
       costUsd: asNumber(parsed.total_cost_usd),
-      subtype: asString(parsed.subtype, "turn.failed"),
+      subtype: readString(parsed.subtype, "turn.failed"),
       isError: true,
       errors: message ? [message] : [],
     }];
