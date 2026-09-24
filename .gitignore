@@ -60,3 +60,6 @@ tests/release-smoke/playwright-report/
 .superpowers/
 .claude/worktrees/
 .herenow
+
+# graphify knowledge-graph output (generated locally)
+graphify-out/
